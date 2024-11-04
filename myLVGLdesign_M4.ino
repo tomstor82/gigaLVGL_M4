@@ -9,39 +9,23 @@
 #define DHTPIN3 4   // shower room
 #define DHTPIN4 5   // loft
 
-// Define DHT type
-#define DHTTYPE DHT22
-
-// Number of retries for sensor
-uint8_t _retries = 3;
-
 // Sensor delay (2000 default for DHT22)
 int _delay = 2000;
 
-//  CANBUS data Identifier List
-
-// CAN data Orion2jr ECU ID 0x7E3
-// ID    Byte  1     2     3     4     5     6     7     8
-// 0x6B0       Amps  "     Volt  "     SOC   Relay "     CRC
-// 0x6B1       DCL   "     "     "     HighT LowT  free  CRC
-// 0x252       CCL   "     LowC HighC  Helth Count Cycl  CRC
-
-// INVESTIGATE ABS_AMP FROM ORION
-
 // CANBUS receive data
-long unsigned int rxId;
-unsigned char len = 0;
-unsigned char rxBuf[8];
+uint32_t rxId;
+uint8_t len = 0;
+uint8_t rxBuf[8];
 
-// CANBUS send data
+// CANBUS send data MPI through MPO
 static uint8_t const CAN_ID = 0x20; // Must be different from other devices on CANbus
-uint8_t const msg_data[] = {0x6B2,0x01,0,0,0,0,0,0};
+uint8_t const msg_data[] = {0x002, 0x01, 0, 0, 0, 0, 0, 0};
 static uint8_t msg_cnt = 0;
 
 // TEMPERATURE offset
 const float temp_offset = 0.7;
 
-// Named SensorData struct so I can use it as a data type
+// Named SensorData struct
 struct SensorData {
     float temp1;
     float temp2;
@@ -59,26 +43,31 @@ struct SensorData {
 // CanData struct
 struct CanData {
     unsigned int rawU;
-    int rawI;
-    byte soc;
-    int hC;
-    int lC;
-    byte h;
+    unsigned int p;
+    
     int fu;
-    byte tH;
-    byte tL;
-    float ah;
+    int rawI;
+    int cc;
+    int fs;
+    int avgI;
+    int kw;
+    int cap;
+    
+    byte soc;
+    byte h;
+    byte hT;
+    byte lT;
     byte ry;
     byte dcl;
     byte ccl;
     byte ct;
     byte st;
-    int cc;
-    int fs;
-    int avgI;
-    unsigned int p;
+    
+    float hC;
+    float lC;
+    float ah;
 
-    MSGPACK_DEFINE_ARRAY(rawU, rawI, soc, hC, lC, h, fu, tH, tL, ah, ry, dcl, ccl, ct, st, cc, fs, avgI, p);
+    MSGPACK_DEFINE_ARRAY(rawU, rawI, soc, hC, lC, h, fu, hT, lT, ah, ry, dcl, ccl, ct, st, cc, fs, avgI, kw, cap, p);
 };
 
 // Declare struct variables
@@ -86,34 +75,19 @@ SensorData sensorData;
 CanData canData;
 
 // READ DHT SENSOR
-float* readDHT(int pin) {
-    DHTNEW sensor(pin);
-    uint8_t i = 0;
-    static float dhtArr[2];
-
-    while (sensor.read() != DHTLIB_OK && i < _retries) {
-        i++;
-        delay(400 * i);
-        RPC.println("DHT sensor read error");
-    }
-
-    if (i == _retries) {
-        RPC.print(_retries);
-        RPC.print(" retries from sensor on pin ");
-        RPC.println(pin);
-        return nullptr;
-    }
-
+float* readDHT(byte pin) {
+  // Create instance and initialise DHT pin
+  DHTNEW sensor(pin);
+  static float dhtArr[2];
+  
+  // if sensor ready return value else return 0
+  if ( sensor.read() == DHTLIB_OK ) {
     dhtArr[0] = sensor.getTemperature();
     dhtArr[1] = sensor.getHumidity();
-    RPC.println("Number of Retries: ");
-    RPC.println(i);
-    RPC.println("Temperature reading: ");
-    RPC.println(dhtArr[0]);
-    RPC.println("Humidity reading: ");
-    RPC.println(dhtArr[1]);
 
     return dhtArr;
+  }
+  else return nullptr;
 }
 
 // STORE SENSOR DATA
@@ -123,70 +97,76 @@ SensorData read_sensors() {
     float* DHTPIN3_readArr = readDHT(DHTPIN3);
     float* DHTPIN4_readArr = readDHT(DHTPIN4);
 
-    if (DHTPIN1_readArr && DHTPIN2_readArr && DHTPIN3_readArr && DHTPIN4_readArr) {
+    // verify data has been received before adding to struct
+    if (DHTPIN1_readArr) {
         sensorData.temp1 = DHTPIN1_readArr[0] + temp_offset;
-        sensorData.temp2 = DHTPIN2_readArr[0] + temp_offset;
-        sensorData.temp3 = DHTPIN3_readArr[0] + temp_offset;
-        sensorData.temp4 = DHTPIN4_readArr[0] + temp_offset;
         sensorData.humi1 = DHTPIN1_readArr[1];
+    }
+    if (DHTPIN2_readArr) {
+        sensorData.temp2 = DHTPIN2_readArr[0] + temp_offset;
         sensorData.humi2 = DHTPIN2_readArr[1];
+    }
+    if (DHTPIN3_readArr) {
+        sensorData.temp3 = DHTPIN3_readArr[0] + temp_offset;
         sensorData.humi3 = DHTPIN3_readArr[1];
+    }
+    if (DHTPIN4_readArr) {
+        sensorData.temp4 = DHTPIN4_readArr[0] + temp_offset;
         sensorData.humi4 = DHTPIN4_readArr[1];
-        sensorData.avg_temp = ((DHTPIN1_readArr[0] + DHTPIN2_readArr[0]) / 2) + temp_offset;
+    }
+    if (DHTPIN1_readArr && DHTPIN2_readArr) {
+       sensorData.avg_temp = ((DHTPIN1_readArr[0] + DHTPIN2_readArr[0]) / 2) + temp_offset;
     }
 }
 
 // SORT CANBUS MSG
 CanData sort_can() {
     if (rxId == 0x6B0) {
-        canData.avgI = 0;
-        canData.rawU = ((rxBuf[2] << 8) + rxBuf[3]);
-        canData.rawI = ((rxBuf[0] << 8) + rxBuf[1]);
-        canData.soc = (rxBuf[4]);
-        canData.ry = ((rxBuf[5] << 8) + rxBuf[6]);
+        canData.rawI = ((rxBuf[0] << 8) + rxBuf[1]) / 10;
+        canData.rawU = ((rxBuf[2] << 8) + rxBuf[3]) / 10;
+        canData.soc = rxBuf[4] / 2;
+        canData.ry = rxBuf[5];
+        canData.st = rxBuf[6];
     }
     if (rxId == 0x6B1) {
         canData.dcl = ((rxBuf[0] << 8) + rxBuf[1]);
-        canData.tH = rxBuf[4];
-        canData.tL = rxBuf[5];
+        canData.ccl = ((rxBuf[2] << 8) + rxBuf[3]);
+        canData.hT = rxBuf[4];
+        canData.lT = rxBuf[5];
+        canData.fu = rxBuf[6];
     }
-    if (rxId == 0x252) {
-        canData.ccl = ((rxBuf[0] << 8) + rxBuf[1]);
-        canData.lC = rxBuf[2];
-        canData.hC = rxBuf[3];
-        canData.h = rxBuf[4];
-        canData.ct = rxBuf[5];
-        canData.cc = rxBuf[6];
+    if (rxId == 0x001) {
+        canData.hC = rxBuf[0] / 1000.0;
+        canData.lC = rxBuf[1] / 1000.0;
+        canData.h = rxBuf[2];
+        canData.ah = rxBuf[3];
+        canData.avgI = rxBuf[4];
+        canData.kw = rxBuf[5];
+        canData.cap = rxBuf[6];
     }
     canData.p = (abs(canData.rawI) / 10.0) * canData.rawU / 10.0;
 }
 
-// Send can message function
+// Send CAN message function
 void sendCan() {
   msg_cnt = 1;
 }
 
 // RPC get Sensor data function
 SensorData getSensorData() {
-  SensorData sensorData;
   return sensorData;
 }
-    
+
 // RPC get CAN data function
 CanData getCanData() {
-  CanData canData;
   return canData;
 }
-
-
 
 // SETUP FUNCTION
 void setup() {
 
+    // Initialize RPC
     RPC.begin();
-    
-    Serial.begin(115200); // Initialize Serial Monitor
-    while (!Serial);
     
     DHTNEW setReadDelay(_delay);
 
@@ -204,7 +184,7 @@ void setup() {
 void loop() {
     // CANBUS READ AND WRITE
     if (CAN.available()) {
-        CanMsg msg = CAN.read();
+        CanMsg const msg = CAN.read();
         rxId = msg.id;
         len = msg.data_length;
         memcpy(rxBuf, msg.data, len);
@@ -224,9 +204,13 @@ void loop() {
           else msg_cnt = 0; // sent successfully
         }
     }
+    else { RPC.println("CAN not available"); }
+    
     // DHT22 SENSORS READ
     read_sensors();
-
-    // SLOW THE LOOP A TAD
     delay(50);
+    /*Serial.print("SOC: ");
+    Serial.println(canData.soc);
+    Serial.print("Temp: ");
+    Serial.println(sensorData.temp4);*/
 }
