@@ -70,7 +70,7 @@ struct CanData {
     MSGPACK_DEFINE_ARRAY(rawU, rawI, soc, hC, lC, h, fu, hT, lT, ah, ry, dcl, ccl, ct, st, cc, fs, avgI, kw, cap, p);
 };
 
-// Declare struct variables
+// Declare struct instances
 SensorData sensorData;
 CanData canData;
 
@@ -154,19 +154,24 @@ void sendCan() {
 
 // RPC get Sensor data function
 SensorData getSensorData() {
+  SensorData sensorData; // is this neccessary
   return sensorData;
 }
 
 // RPC get CAN data function
 CanData getCanData() {
+  CanData canData; // is this neccessary
   return canData;
 }
 
 // SETUP FUNCTION
 void setup() {
 
-    // Initialize RPC
-    RPC.begin();
+    // Initialise RPC on M4 only to avoid M4 bootup while testing on M7
+    //if (RPC.cpu_id() == CM4_CPUID) {
+      RPC.begin();
+      //RPC.println("Received boot command from M7 core");
+    //}
     
     DHTNEW setReadDelay(_delay);
 
@@ -212,5 +217,7 @@ void loop() {
     /*Serial.print("SOC: ");
     Serial.println(canData.soc);
     Serial.print("Temp: ");
-    Serial.println(sensorData.temp4);*/
+    Serial.println(sensorData.temp4);
+    Serial.print("rawI: ");
+    Serial.println(canData.rawI);*/
 }
