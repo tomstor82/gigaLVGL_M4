@@ -71,8 +71,8 @@ struct CanData {
 };
 
 // Declare struct variables
-SensorData sensorData;
-CanData canData;
+static SensorData sensorData;
+static CanData canData;
 
 // READ DHT SENSOR
 float* readDHT(byte pin) {
@@ -91,7 +91,7 @@ float* readDHT(byte pin) {
 }
 
 // STORE SENSOR DATA
-SensorData read_sensors() {
+void read_sensors() {
     float* DHTPIN1_readArr = readDHT(DHTPIN1);
     float* DHTPIN2_readArr = readDHT(DHTPIN2);
     float* DHTPIN3_readArr = readDHT(DHTPIN3);
@@ -120,7 +120,7 @@ SensorData read_sensors() {
 }
 
 // SORT CANBUS MSG
-CanData sort_can() {
+void sort_can() {
     if (rxId == 0x6B0) {
         canData.rawI = ((rxBuf[0] << 8) + rxBuf[1]) / 10;
         canData.rawU = ((rxBuf[2] << 8) + rxBuf[3]) / 10;
@@ -164,9 +164,16 @@ CanData getCanData() {
 
 // SETUP FUNCTION
 void setup() {
-
-    // Initialize RPC
-    RPC.begin();
+    // Initialize RPC if this is M4 core to allow testing on M7 without booting M4
+    if ( RPC.cpu_id() == CM7_CPUID ) {
+      Serial.begin(115200);
+      while(!Serial); // wait for serial connection
+      Serial.println("Serial Communication Enabled at 115200kbps");
+    }
+    else {
+      // if this is M4 core start RPC
+      RPC.begin();
+    }
     
     DHTNEW setReadDelay(_delay);
 
@@ -209,8 +216,16 @@ void loop() {
     // DHT22 SENSORS READ
     read_sensors();
     delay(50);
-    /*Serial.print("SOC: ");
-    Serial.println(canData.soc);
-    Serial.print("Temp: ");
-    Serial.println(sensorData.temp4);*/
+
+    RPC.print("M4 Temperature: ");
+    RPC.println(sensorData.temp3);
+    RPC.print("M4 SOC: ");
+    RPC.println(canData.soc);
+    // if M7 running script
+    if (Serial) {
+      Serial.print("SOC: ");
+      Serial.println(canData.soc);
+      Serial.print("Temp: ");
+      Serial.println(sensorData.temp3);
+    }
 }
