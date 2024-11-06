@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <RPC.h>
 #include <dhtnew.h>
-#include <Arduino_CAN.h>
+//#include <Arduino_CAN.h>
 
 // Define pins for DHT22 sensors
 #define DHTPIN1 2   // living space r/h
@@ -13,14 +13,14 @@
 int _delay = 2000;
 
 // CANBUS receive data
-uint32_t rxId;
+/*uint32_t rxId;
 uint8_t len = 0;
 uint8_t rxBuf[8];
 
 // CANBUS send data MPI through MPO
 static uint8_t const CAN_ID = 0x20; // Must be different from other devices on CANbus
 uint8_t const msg_data[] = {0x002, 0x01, 0, 0, 0, 0, 0, 0};
-static uint8_t msg_cnt = 0;
+static uint8_t msg_cnt = 0;*/
 
 // TEMPERATURE offset
 const float temp_offset = 0.7;
@@ -41,7 +41,7 @@ struct SensorData {
 };
 
 // CanData struct
-struct CanData {
+/*struct CanData {
     unsigned int rawU;
     unsigned int p;
     
@@ -68,11 +68,17 @@ struct CanData {
     float ah;
 
     MSGPACK_DEFINE_ARRAY(rawU, rawI, soc, hC, lC, h, fu, hT, lT, ah, ry, dcl, ccl, ct, st, cc, fs, avgI, kw, cap, p);
-};
+};*/
 
+<<<<<<< Updated upstream
 // Declare struct instances
 SensorData sensorData;
 CanData canData;
+=======
+// Declare struct variables
+static SensorData sensorData;
+//static CanData canData;
+>>>>>>> Stashed changes
 
 // READ DHT SENSOR
 float* readDHT(byte pin) {
@@ -120,7 +126,11 @@ SensorData read_sensors() {
 }
 
 // SORT CANBUS MSG
+<<<<<<< Updated upstream
 CanData sort_can() {
+=======
+/*void sort_can() {
+>>>>>>> Stashed changes
     if (rxId == 0x6B0) {
         canData.rawI = ((rxBuf[0] << 8) + rxBuf[1]) / 10;
         canData.rawU = ((rxBuf[2] << 8) + rxBuf[3]) / 10;
@@ -150,7 +160,7 @@ CanData sort_can() {
 // Send CAN message function
 void sendCan() {
   msg_cnt = 1;
-}
+}*/
 
 // RPC get Sensor data function
 SensorData getSensorData() {
@@ -159,10 +169,14 @@ SensorData getSensorData() {
 }
 
 // RPC get CAN data function
+<<<<<<< Updated upstream
 CanData getCanData() {
   CanData canData; // is this neccessary
+=======
+/*CanData getCanData() {
+>>>>>>> Stashed changes
   return canData;
-}
+}*/
 
 // SETUP FUNCTION
 void setup() {
@@ -170,25 +184,30 @@ void setup() {
     // Initialise RPC on M4 only to avoid M4 bootup while testing on M7
     //if (RPC.cpu_id() == CM4_CPUID) {
       RPC.begin();
+<<<<<<< Updated upstream
       //RPC.println("Received boot command from M7 core");
     //}
+=======
+      RPC.println("M4 Core online");
+    }
+>>>>>>> Stashed changes
     
     DHTNEW setReadDelay(_delay);
 
-    if (!CAN.begin(CanBitRate::BR_500k)) {
+   /* if (!CAN.begin(CanBitRate::BR_500k)) {
         RPC.println("CAN.begin(...) failed.");
         for (;;) {}
-    }
+    }*/
     // Make M4 functions available on M7
     RPC.bind("getSensorData", getSensorData);
-    RPC.bind("getCanData", getCanData);
-    RPC.bind("sendCan", sendCan);
+    /*RPC.bind("getCanData", getCanData);
+    RPC.bind("sendCan", sendCan);*/
 }
 
 // LOOP FUNCTION
 void loop() {
     // CANBUS READ AND WRITE
-    if (CAN.available()) {
+    /*if (CAN.available()) {
         CanMsg const msg = CAN.read();
         rxId = msg.id;
         len = msg.data_length;
@@ -209,15 +228,30 @@ void loop() {
           else msg_cnt = 0; // sent successfully
         }
     }
-    else { RPC.println("CAN not available"); }
+    else { RPC.println("M4 CAN not available"); }*/
     
     // DHT22 SENSORS READ
     read_sensors();
     delay(50);
+<<<<<<< Updated upstream
     /*Serial.print("SOC: ");
     Serial.println(canData.soc);
     Serial.print("Temp: ");
     Serial.println(sensorData.temp4);
     Serial.print("rawI: ");
     Serial.println(canData.rawI);*/
+=======
+
+    /*RPC.print("M4 Temperature: ");
+    RPC.println(sensorData.temp3);
+    RPC.print("M4 SOC: ");
+    RPC.println(canData.soc);*/
+    // if M7 running script
+    if (Serial) {
+      /*Serial.print("M7 SOC: ");
+      Serial.println(canData.soc);*/
+      Serial.print("M7 Temp: ");
+      Serial.println(sensorData.temp3);
+    }
+>>>>>>> Stashed changes
 }
