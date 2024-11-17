@@ -42,43 +42,42 @@ struct SensorData {
 
 // CanData struct
 /*struct CanData {
-    unsigned int rawU;
-    unsigned int p;
-    
-    int fu;
-    int rawI;
-    int cc;
-    int fs;
-    int avgI;
-    int kw;
-    int cap;
-    
-    byte soc;
-    byte h;
-    byte hT;
-    byte lT;
-    byte ry;
-    byte dcl;
-    byte ccl;
-    byte ct;
-    byte st;
-    
-    float hC;
-    float lC;
-    float ah;
 
-    MSGPACK_DEFINE_ARRAY(rawU, rawI, soc, hC, lC, h, fu, hT, lT, ah, ry, dcl, ccl, ct, st, cc, fs, avgI, kw, cap, p);
+    int p;                  // watt calculated by script
+
+    float instU;             // Voltage - multiplied by 10
+    float instI;             // Current - multiplied by 10 - negative value indicates charge
+    float avgI;             // Average current for clock and sun symbol calculations
+    float absI;             // Absolute Current NOT WORKING CORRECTLY
+    float ah;               // Amp hours
+    float hC;               // High Cell Voltage in 0,0001V
+    float lC;               // Low Cell Voltage in 0,0001V
+
+    byte soc;               // State of charge - multiplied by 2
+    byte hT;                // Highest cell temperature * was int
+    byte lT;                // Lowest cell temperature * was int
+    byte ry;                // Relay status
+    byte dcl;               // Discharge current limit * was unsigned int
+    byte ccl;               // Charge current limit * was unsigned int
+    byte ct;                // Counter to observe data received
+    byte st;                // BMS Status
+    byte h;                 // Health
+    byte hCid;              // High Cell ID
+    byte lCid;              // Low Cell ID
+
+    int fu;                 // BMS faults
+    int fs;                 // Fault messages & status from CANBus for displaying wrench icon
+    int cc;                 // Total pack cycles
+
+    float kw;               // Active power 0,1kW
+    byte hs;                // Internal Heatsink
+    
+    MSGPACK_DEFINE_ARRAY(instU, instI, soc, hC, lC, h, fu, hT, lT, ah, ry, dcl, ccl, ct, st, cc, fs, avgI, hCid, lCid, p, absI, kw, hs);
 };*/
 
-<<<<<<< Updated upstream
-// Declare struct instances
+// Declare struct instances (non static) to refresh data
 SensorData sensorData;
-CanData canData;
-=======
-// Declare struct variables
-static SensorData sensorData;
-//static CanData canData;
->>>>>>> Stashed changes
+//CanData canData;
 
 // READ DHT SENSOR
 float* readDHT(byte pin) {
@@ -125,56 +124,65 @@ SensorData read_sensors() {
     }
 }
 
-// SORT CANBUS MSG
-<<<<<<< Updated upstream
-CanData sort_can() {
-=======
-/*void sort_can() {
->>>>>>> Stashed changes
-    if (rxId == 0x6B0) {
-        canData.rawI = ((rxBuf[0] << 8) + rxBuf[1]) / 10;
-        canData.rawU = ((rxBuf[2] << 8) + rxBuf[3]) / 10;
-        canData.soc = rxBuf[4] / 2;
-        canData.ry = rxBuf[5];
-        canData.st = rxBuf[6];
-    }
-    if (rxId == 0x6B1) {
-        canData.dcl = ((rxBuf[0] << 8) + rxBuf[1]);
-        canData.ccl = ((rxBuf[2] << 8) + rxBuf[3]);
-        canData.hT = rxBuf[4];
-        canData.lT = rxBuf[5];
-        canData.fu = rxBuf[6];
-    }
-    if (rxId == 0x001) {
-        canData.hC = rxBuf[0] / 1000.0;
-        canData.lC = rxBuf[1] / 1000.0;
-        canData.h = rxBuf[2];
-        canData.ah = rxBuf[3];
-        canData.avgI = rxBuf[4];
-        canData.kw = rxBuf[5];
-        canData.cap = rxBuf[6];
-    }
-    canData.p = (abs(canData.rawI) / 10.0) * canData.rawU / 10.0;
+// CONVERT UNSIGNED TO SIGNED FUNCTION ////////////////////////////////////////
+/*int16_t signValue(uint16_t canValue) {
+  int16_t signedValue = (canValue > 32767) ? canValue - 65536 : canValue;
+  return signedValue;
 }
 
+// SORT CANBUS DATA ////////////////////////////////////////////////////////////
+void sort_can() {
+
+    // I WOULD LIKE TO COMPARE CHECKSUM BUT CPP STD LIBRARY NOT AVAILABLE I BELIEVE
+    if (rxId == 0x3B) {
+        canData.instU = ((rxBuf[0] << 8) + rxBuf[1]) / 10.0;
+        canData.instI = (signValue((rxBuf[2] << 8) + rxBuf[3])) / 10.0; // orion2jr issue: unsigned value despite ticket as signed
+        canData.absI = ((rxBuf[4] << 8) + rxBuf[5]) / 10.0; // orion2jr issue: set signed and -32767 to fix
+        canData.soc = rxBuf[6] / 2;
+    }
+    if(rxId == 0x6B2) {
+        canData.lC = ((rxBuf[0] << 8) + rxBuf[1]) / 10000.00;
+        canData.hC = ((rxBuf[2] << 8) + rxBuf[3]) / 10000.00;
+        canData.h = rxBuf[4];
+        canData.cc = (rxBuf[5] << 8) + rxBuf[6];
+    }
+    if(rxId == 0x0A9) {    
+        canData.ry = rxBuf[0];
+        canData.ccl = rxBuf[1];
+        canData.dcl = rxBuf[2];
+        canData.ah = ((rxBuf[3] << 8) + rxBuf[4]) / 10.0;
+        canData.avgI = (signValue((rxBuf[5] << 8) + rxBuf[6])) / 10.0; // orion2jr issue: unsigned value despite ticket as signed
+    }
+    if(rxId == 0x0BD) {
+        canData.fu = (rxBuf[0] << 8) + rxBuf[1];
+        canData.hT = rxBuf[2];
+        canData.lT = rxBuf[3];
+        canData.ct = rxBuf[4];
+        canData.st = rxBuf[5];
+    }
+    if(rxId == 0x0BE) {
+        canData.hCid = rxBuf[0];
+        canData.lCid = rxBuf[1];
+        canData.hs = rxBuf[2];
+        canData.kw = ((rxBuf[3] << 8) + rxBuf[4]) / 10.0;
+    }
+    canData.p = canData.avgI * canData.instU;
+}*/
+
 // Send CAN message function
-void sendCan() {
+/*void sendCan() {
   msg_cnt = 1;
 }*/
 
 // RPC get Sensor data function
 SensorData getSensorData() {
-  SensorData sensorData; // is this neccessary
+  //SensorData sensorData; // is this neccessary
   return sensorData;
 }
 
 // RPC get CAN data function
-<<<<<<< Updated upstream
-CanData getCanData() {
-  CanData canData; // is this neccessary
-=======
 /*CanData getCanData() {
->>>>>>> Stashed changes
+  CanData canData; // is this neccessary
   return canData;
 }*/
 
@@ -182,22 +190,18 @@ CanData getCanData() {
 void setup() {
 
     // Initialise RPC on M4 only to avoid M4 bootup while testing on M7
-    //if (RPC.cpu_id() == CM4_CPUID) {
+    if (RPC.cpu_id() == CM4_CPUID) {
       RPC.begin();
-<<<<<<< Updated upstream
-      //RPC.println("Received boot command from M7 core");
-    //}
-=======
       RPC.println("M4 Core online");
     }
->>>>>>> Stashed changes
     
     DHTNEW setReadDelay(_delay);
 
-   /* if (!CAN.begin(CanBitRate::BR_500k)) {
+    /*if (!CAN.begin(CanBitRate::BR_500k)) {
         RPC.println("CAN.begin(...) failed.");
         for (;;) {}
-    }*/
+    }
+    else RPC.println("CAN started");*/
     // Make M4 functions available on M7
     RPC.bind("getSensorData", getSensorData);
     /*RPC.bind("getCanData", getCanData);
@@ -206,7 +210,7 @@ void setup() {
 
 // LOOP FUNCTION
 void loop() {
-    // CANBUS READ AND WRITE
+    // CANBUS READ AND WRITE 
     /*if (CAN.available()) {
         CanMsg const msg = CAN.read();
         rxId = msg.id;
@@ -233,25 +237,15 @@ void loop() {
     // DHT22 SENSORS READ
     read_sensors();
     delay(50);
-<<<<<<< Updated upstream
-    /*Serial.print("SOC: ");
-    Serial.println(canData.soc);
-    Serial.print("Temp: ");
-    Serial.println(sensorData.temp4);
-    Serial.print("rawI: ");
-    Serial.println(canData.rawI);*/
-=======
+     // M4 Core only
+    if ( !Serial ) {
+      RPC.print("M4 Temperature: ");
+      RPC.println(sensorData.temp3);
+    }
 
-    /*RPC.print("M4 Temperature: ");
-    RPC.println(sensorData.temp3);
-    RPC.print("M4 SOC: ");
-    RPC.println(canData.soc);*/
-    // if M7 running script
-    if (Serial) {
-      /*Serial.print("M7 SOC: ");
-      Serial.println(canData.soc);*/
-      Serial.print("M7 Temp: ");
+    // M7 Core only
+    if ( Serial ) {
+      Serial.print("M7 Temperature: ");
       Serial.println(sensorData.temp3);
     }
->>>>>>> Stashed changes
 }
