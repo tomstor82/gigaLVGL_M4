@@ -35,10 +35,12 @@ struct SensorData {
 SensorData sensorData;
 
 // Global Variables
-uint16_t _delay = 2000; // Sensor delay (2000 default for DHT22)
-float _tempOffset = 0.7;
+uint16_t _delay = 2000; // DHT22 sensor initiation delay
 uint32_t _lastSensorReadTime;
-uint16_t _readInterval = 300;
+uint16_t _readInterval = 2000; // recommended for accuracy but sensor will read around 360-370ms
+
+float _humOffset = 0;  // Can expand on this and temp for individual sensors
+float _tempOffset = 0.7;
 
 // Create instances of DHT sensors
 DHTNEW dht1(DHT1_PIN);
@@ -56,7 +58,7 @@ bool readDHT(DHTNEW &sensor, float* dhtArr) {
     dhtArr[1] = sensor.getHumidity();
     count = 0;
     return true;
-  } else if (count > 5) {
+  } else if (count > 10) { // 10 reads = 20s before setting fault
     dhtArr[0] = 999.0f;
     dhtArr[1] = 999.0f;
     count = 0;
@@ -69,10 +71,10 @@ bool readDHT(DHTNEW &sensor, float* dhtArr) {
 
 // STORE SENSOR DATA
 void read_sensors() {
-    float dht1Arr[2]; // = {999.0f, 999.0f}; // Initialize arrays with default values
-    float dht2Arr[2]; // = {999.0f, 999.0f};
-    float dht3Arr[2]; // = {999.0f, 999.0f};
-    float dht4Arr[2]; // = {999.0f, 999.0f};
+    float dht1Arr[2] = {999.0f, 999.0f}; // Initialize arrays with default values
+    float dht2Arr[2] = {999.0f, 999.0f};
+    float dht3Arr[2] = {999.0f, 999.0f};
+    float dht4Arr[2] = {999.0f, 999.0f};
 
     bool dht1Read = readDHT(dht1, dht1Arr);
     bool dht2Read = readDHT(dht2, dht2Arr);
@@ -126,6 +128,10 @@ void setup() {
     dht2.setReadDelay(_delay);
     dht3.setReadDelay(_delay);
     dht4.setReadDelay(_delay);
+    dht1.setHumOffset(_humOffset);
+    dht2.setHumOffset(_humOffset);
+    dht3.setHumOffset(_humOffset);
+    dht4.setHumOffset(_humOffset);
     dht1.setTempOffset(_tempOffset);
     dht2.setTempOffset(_tempOffset);
     dht3.setTempOffset(_tempOffset);
