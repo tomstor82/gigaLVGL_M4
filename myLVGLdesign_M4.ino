@@ -18,15 +18,15 @@
 
 // Named SensorData struct
 struct SensorData {
-    float temp1;
-    float temp2;
-    float temp3;
-    float temp4;
-    float humi1;
-    float humi2;
-    float humi3;
-    float humi4;
-    float avg_temp;
+    float temp1 = 999.0f;
+    float temp2 = 999.0f;
+    float temp3 = 999.0f;
+    float temp4 = 999.0f;
+    float humi1 = 999.0f;
+    float humi2 = 999.0f;
+    float humi3 = 999.0f;
+    float humi4 = 999.0f;
+    float avg_temp = 999.0f;
 
     MSGPACK_DEFINE_ARRAY(temp1, temp2, temp3, temp4, humi1, humi2, humi3, humi4, avg_temp);
 };
@@ -37,7 +37,7 @@ SensorData sensorData;
 // Global Variables
 uint16_t _delay = 2000; // DHT22 sensor initiation delay
 uint32_t _lastSensorReadTime;
-uint16_t _readInterval = 2000; // recommended for accuracy but sensor will read around 360-370ms
+uint16_t _readInterval = 2000; // 2000 recommended for accuracy but sensor will read around 360-370ms
 
 float _humOffset = 0;  // Can expand on this and temp for individual sensors
 float _tempOffset = 0.7;
@@ -58,7 +58,7 @@ bool readDHT(DHTNEW &sensor, float* dhtArr) {
     dhtArr[1] = sensor.getHumidity();
     count = 0;
     return true;
-  } else if (count > 10) { // 10 reads = 20s before setting fault
+  } else if (count > 5) { // 5 reads or else it won't work
     dhtArr[0] = 999.0f;
     dhtArr[1] = 999.0f;
     count = 0;
@@ -71,10 +71,10 @@ bool readDHT(DHTNEW &sensor, float* dhtArr) {
 
 // STORE SENSOR DATA
 void read_sensors() {
-    float dht1Arr[2] = {999.0f, 999.0f}; // Initialize arrays with default values
-    float dht2Arr[2] = {999.0f, 999.0f};
-    float dht3Arr[2] = {999.0f, 999.0f};
-    float dht4Arr[2] = {999.0f, 999.0f};
+    float dht1Arr[2];// = {999.0f, 999.0f}; // Initialize arrays with default values
+    float dht2Arr[2];// = {999.0f, 999.0f};
+    float dht3Arr[2];// = {999.0f, 999.0f};
+    float dht4Arr[2];// = {999.0f, 999.0f};
 
     bool dht1Read = readDHT(dht1, dht1Arr);
     bool dht2Read = readDHT(dht2, dht2Arr);
@@ -144,18 +144,21 @@ void loop() {
     if (millis() > _lastSensorReadTime + _readInterval) {
       _lastSensorReadTime = millis();
       read_sensors();
-    }
 
-    // M4 Core only
-    if (!Serial) {
-      /*RPC.print("M4 Temperature 1: ");
+      //DEBUG
+      RPC.print("M4 Temperature 1: ");
       RPC.println(sensorData.temp1);
       RPC.print("M4 Temperature 2: ");
       RPC.println(sensorData.temp2);
       RPC.print("M4 Temperature 3: ");
       RPC.println(sensorData.temp3);
       RPC.print("M4 Temperature 4: ");
-      RPC.println(sensorData.temp4);*/
+      RPC.println(sensorData.temp4);
+    }
+
+    // M4 Core only
+    if (!Serial) {
+      
     }
 
     // M7 Core only
