@@ -16,7 +16,7 @@
 #define DHT3_PIN 4   // shower room
 #define DHT4_PIN 5   // loft
 
-// Named SensorData struct
+// Named SensorData struct initialised with faulty data
 struct SensorData {
     float temp1 = 999.0f;
     float temp2 = 999.0f;
@@ -35,9 +35,8 @@ struct SensorData {
 SensorData sensorData;
 
 // Global Variables
-uint16_t _delay = 2000; // DHT22 sensor initiation delay
+uint16_t _delay = 2000; // DHT22 sensor 2000ms recommended for accuracy but sensor will read around 360-370ms
 uint32_t _lastSensorReadTime;
-uint16_t _readInterval = 2000; // 2000 recommended for accuracy but sensor will read around 360-370ms
 
 float _humOffset = 0;  // Can expand on this and temp for individual sensors
 float _tempOffset = 0.7;
@@ -71,10 +70,10 @@ bool readDHT(DHTNEW &sensor, float* dhtArr) {
 
 // STORE SENSOR DATA
 void read_sensors() {
-    float dht1Arr[2];// = {999.0f, 999.0f}; // Initialize arrays with default values
-    float dht2Arr[2];// = {999.0f, 999.0f};
-    float dht3Arr[2];// = {999.0f, 999.0f};
-    float dht4Arr[2];// = {999.0f, 999.0f};
+    float dht1Arr[2];
+    float dht2Arr[2];
+    float dht3Arr[2];
+    float dht4Arr[2];
 
     bool dht1Read = readDHT(dht1, dht1Arr);
     bool dht2Read = readDHT(dht2, dht2Arr);
@@ -123,11 +122,15 @@ void setup() {
     // Make M4 functions available on M7
     RPC.bind("getSensorData", getSensorData);
 
+    // Set sensor type and initialise read 
+    DHT.setType(22);
+    /*DHT.setReadDelay(_delay);*/ // not needed as I account for this in my non-blocking timer in loop
+
     // Set read delay and temperature offset for all sensors
-    dht1.setReadDelay(_delay);
+    /*dht1.setReadDelay(_delay);
     dht2.setReadDelay(_delay);
     dht3.setReadDelay(_delay);
-    dht4.setReadDelay(_delay);
+    dht4.setReadDelay(_delay);*/
     dht1.setHumOffset(_humOffset);
     dht2.setHumOffset(_humOffset);
     dht3.setHumOffset(_humOffset);
@@ -141,19 +144,19 @@ void setup() {
 // LOOP FUNCTION
 void loop() {
     // DHT22 SENSORS READ NON-BLOCKING
-    if (millis() > _lastSensorReadTime + _readInterval) {
+    if (millis() > _lastSensorReadTime + _delay) {
       _lastSensorReadTime = millis();
       read_sensors();
 
       //DEBUG
-      RPC.print("M4 Temperature 1: ");
+      /*RPC.print("M4 Temperature 1: ");
       RPC.println(sensorData.temp1);
       RPC.print("M4 Temperature 2: ");
       RPC.println(sensorData.temp2);
       RPC.print("M4 Temperature 3: ");
       RPC.println(sensorData.temp3);
       RPC.print("M4 Temperature 4: ");
-      RPC.println(sensorData.temp4);
+      RPC.println(sensorData.temp4);*/
     }
 
     // M4 Core only
@@ -163,8 +166,8 @@ void loop() {
 
     // M7 Core only
     if (Serial) {
-      Serial.print("M7 Temperature: ");
-      Serial.println(sensorData.temp3);
+      /*Serial.print("M7 Temperature: ");
+      Serial.println(sensorData.temp3);*/
     }
     delay(50);
 }
