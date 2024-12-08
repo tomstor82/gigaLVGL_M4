@@ -41,6 +41,9 @@ uint32_t _lastSensorReadTime;
 float _humOffset = 0;  // Can expand on this and temp for individual sensors
 float _tempOffset = 0.7;
 
+// Set sensor type 22 = dht22/am2320-22
+DHTNEW setType(22);
+
 // Create instances of DHT sensors
 DHTNEW dht1(DHT1_PIN);
 DHTNEW dht2(DHT2_PIN);
@@ -121,10 +124,6 @@ void setup() {
     
     // Make M4 functions available on M7
     RPC.bind("getSensorData", getSensorData);
-
-    // Set sensor type and initialise read 
-    DHT.setType(22);
-    /*DHT.setReadDelay(_delay);*/ // not needed as I account for this in my non-blocking timer in loop
 
     // Set read delay and temperature offset for all sensors
     /*dht1.setReadDelay(_delay);
