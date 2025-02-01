@@ -125,11 +125,7 @@ void setup() {
     // Make M4 functions available on M7
     RPC.bind("getSensorData", getSensorData);
 
-    // Set read delay and temperature offset for all sensors
-    /*dht1.setReadDelay(_delay);
-    dht2.setReadDelay(_delay);
-    dht3.setReadDelay(_delay);
-    dht4.setReadDelay(_delay);*/
+    // Set offset for all sensors
     dht1.setHumOffset(_humOffset);
     dht2.setHumOffset(_humOffset);
     dht3.setHumOffset(_humOffset);
