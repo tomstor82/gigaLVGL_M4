@@ -5,7 +5,7 @@
 // DHT PIN layout from left to right
 // =================================
 // FRONT : DESCRIPTION
-// pin 1 : VCC
+// pin 1 : VCC 3,3 - 6,0 V (use 5V as line is long to loft ceiling)
 // pin 2 : DATA
 // pin 3 : Not Connected
 // pin 4 : GND
@@ -14,19 +14,19 @@
 #define DHT1_PIN 2   // living space r/h
 #define DHT2_PIN 3   // living space l/h
 #define DHT3_PIN 4   // shower room
-#define DHT4_PIN 5   // loft
+#define DHT4_PIN 5   // loft ceiling
 
 // Named SensorData struct initialised with faulty data
 struct SensorData {
-    float temp1 = 999.0f;
-    float temp2 = 999.0f;
-    float temp3 = 999.0f;
-    float temp4 = 999.0f;
-    float rh1 = 999.0f;
-    float rh2 = 999.0f;
-    float rh3 = 999.0f;
-    float rh4 = 999.0f;
-    float avg_temp = 999.0f;
+    float temp1 = 999.9f;
+    float temp2 = 999.9f;
+    float temp3 = 999.9f;
+    float temp4 = 999.9f;
+    float rh1 = 999.9f;
+    float rh2 = 999.9f;
+    float rh3 = 999.9f;
+    float rh4 = 999.9f;
+    float avg_temp = 999.9f;
 
     MSGPACK_DEFINE_ARRAY(temp1, temp2, temp3, temp4, rh1, rh2, rh3, rh4, avg_temp);
 };
@@ -51,66 +51,94 @@ DHTNEW dht3(DHT3_PIN);
 DHTNEW dht4(DHT4_PIN);
 
 // READ DHT SENSOR
-bool readDHT(DHTNEW &sensor, float* dhtArr) {
-  static uint8_t count = 0; // static to be remembered between calls
+bool readDHT(DHTNEW &sensor, float* dhtArr, byte retries) {
 
-  // if sensor ready return value else return 0
+  // IF SENSOR READY RETURN READINGS
   if (sensor.read() == DHTLIB_OK) {
     dhtArr[0] = sensor.getTemperature();
     dhtArr[1] = sensor.getHumidity();
-    count = 0;
     return true;
   }
-  else if (count > 5) { // 5 reads or else it won't work
-    dhtArr[0] = 999.0f;
-    dhtArr[1] = 999.0f;
-    count = 0;
-    sensor.powerUp(); // try rebooting sensor
-    RPC.println("M4 Attempting to reboot faulty DHT22");
+  // IF RETRIES EXCEED 5 SET DATA TO INVALID AKA 999.9
+  else if (retries > 5) {
+    dhtArr[0] = 999.9f;
+    dhtArr[1] = 999.9f;
+    // RESTART AND RESET SENSOR
+    sensor.powerUp();
+    sensor.reset();
+    RPC.println("M4 Restarting and resetting DHT22 sensor");
     return true;
   }
+  // IF SENSOR NOT READY RETURN FALSE TO INCREMENT RETRIES IN CALLBACK
   else {
-    count++;
+    // POWER DOWN SENSOR IF 5 RETRIES
+    if (retries == 5) {
+      sensor.powerDown();
+      RPC.println("M4 Shutting down DHT22 sensor after 5 retries");
+    }
     return false;
   }
 }
 
 // STORE SENSOR DATA
 void read_sensors() {
-    float dht1Arr[2];
-    float dht2Arr[2];
-    float dht3Arr[2];
-    float dht4Arr[2];
 
-    bool dht1Read = readDHT(dht1, dht1Arr);
-    bool dht2Read = readDHT(dht2, dht2Arr);
-    bool dht3Read = readDHT(dht3, dht3Arr);
-    bool dht4Read = readDHT(dht4, dht4Arr);
+  float dht1Arr[2];
+  float dht2Arr[2];
+  float dht3Arr[2];
+  float dht4Arr[2];
 
-    // Verify data has been received before adding to struct
-    if (dht1Read) {
-        sensorData.temp1 = dht1Arr[0];
-        sensorData.rh1 = dht1Arr[1];
-    }
-    if (dht2Read) {
-        sensorData.temp2 = dht2Arr[0];
-        sensorData.rh2 = dht2Arr[1];
-    }
-    if (dht3Read) {
-        sensorData.temp3 = dht3Arr[0];
-        sensorData.rh3 = dht3Arr[1];
-    }
-    if (dht4Read) {
-        sensorData.temp4 = dht4Arr[0];
-        sensorData.rh4 = dht4Arr[1];
-    }
+  static byte dht_retries[4] = {0, 0, 0, 0};
 
-    // Check for valid data before calculating avg_temp
-    if (dht1Read && dht2Read && dht4Read) {
-        sensorData.avg_temp = (dht1Arr[0] + dht2Arr[0] + dht4Arr[0]) / 3;
-    } else {
-        sensorData.avg_temp = 999.0f; // Set to invalid value if any sensor data is missing
-    }
+  bool dht1Read = readDHT(dht1, dht1Arr, dht_retries[0]);
+  bool dht2Read = readDHT(dht2, dht2Arr, dht_retries[1]);
+  bool dht3Read = readDHT(dht3, dht3Arr, dht_retries[2]);
+  bool dht4Read = readDHT(dht4, dht4Arr, dht_retries[3]);
+
+  // Verify data has been received before adding to struct
+  if (dht1Read) {
+    sensorData.temp1 = dht1Arr[0];
+    sensorData.rh1 = dht1Arr[1];
+    dht_retries[0] = 0;
+  }
+  else {
+    dht_retries[0]++;
+  }
+  // LIVING ROOM L/H SENSOR
+  if (dht2Read) {
+    sensorData.temp2 = dht2Arr[0];
+    sensorData.rh2 = dht2Arr[1];
+    dht_retries[1] = 0;
+  }
+  else {
+    dht_retries[1]++;
+  }
+  // SHOWER ROOM SENSOR
+  if (dht3Read) {
+    sensorData.temp3 = dht3Arr[0];
+    sensorData.rh3 = dht3Arr[1];
+    dht_retries[2] = 0;
+  }
+  else {
+    dht_retries[2]++;
+  }
+  // LOFT CEILING SENSOR
+  if (dht4Read) {
+    sensorData.temp4 = dht4Arr[0];
+    sensorData.rh4 = dht4Arr[1];
+    dht_retries[3] = 0;
+  }
+  else {
+    dht_retries[3]++;
+  }
+
+  // Check for valid data before calculating avg_temp
+  if (dht1Read && dht2Read && dht4Read) {
+    sensorData.avg_temp = (dht1Arr[0] + dht2Arr[0] + dht4Arr[0]) / 3;
+  }
+  else {
+    sensorData.avg_temp = 999.9f; // Set to invalid value if any sensor data is missing
+  }
 }
 
 // RPC get Sensor data function
@@ -138,6 +166,10 @@ void setup() {
     dht2.setTempOffset(temp_offset);
     dht3.setTempOffset(temp_offset);
     dht4.setTempOffset(temp_offset);
+
+    // initialise timer and sensors
+    last_sensor_read_ms = millis();
+    read_sensors();
 }
 
 // LOOP FUNCTION
@@ -158,15 +190,5 @@ void loop() {
       RPC.println(sensorData.temp4);*/
     }
 
-    // M4 Core only
-    if (!Serial) {
-      
-    }
-
-    // M7 Core only
-    if (Serial) {
-      /*Serial.print("M7 Temperature: ");
-      Serial.println(sensorData.temp3);*/
-    }
-    delay(50);
+    delay(5);
 }
