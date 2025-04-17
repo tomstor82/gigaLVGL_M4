@@ -38,8 +38,8 @@ SensorData sensorData;
 uint16_t delay_ms = 2000; // DHT22 sensor 2000ms recommended for accuracy but sensor will read around 360-370ms
 uint32_t last_sensor_read_ms;
 
-float rh_offset = 0;  // Can expand on this and temp for individual sensors
-float temp_offset = 0.7;
+float rh_offset[4] = {0, 0, 0, 0};
+float temp_offset[4] = {0.7, 0.7, 0.7, 0.7};
 
 // Set sensor type 22 = dht22/am2320-22
 DHTNEW setType(22);
@@ -63,16 +63,20 @@ bool readDHT(DHTNEW &sensor, float* dhtArr, byte retries) {
   else if (retries > 5) {
     dhtArr[0] = 999.9f;
     dhtArr[1] = 999.9f;
-    // RESTART AND RESET SENSOR
+    // RESTART SENSOR
     sensor.powerUp();
-    sensor.reset();
-    RPC.println("M4 Restarting and resetting DHT22 sensor");
+    RPC.println("M4 Restarting DHT22 sensor after 6 retries");
     return true;
   }
   // IF SENSOR NOT READY RETURN FALSE TO INCREMENT RETRIES IN CALLBACK
   else {
-    // POWER DOWN SENSOR IF 5 RETRIES
-    if (retries == 5) {
+    // RESET SENSOR AFTER 3 RETRIES
+    if (retries == 3) {
+      sensor.reset();
+      RPC.println("M4 Resetting DHT22 sensor after 3 retries");
+    }
+    // POWER DOWN SENSOR AFTER 5 RETRIES
+    else if (retries == 5) {
       sensor.powerDown();
       RPC.println("M4 Shutting down DHT22 sensor after 5 retries");
     }
@@ -83,22 +87,19 @@ bool readDHT(DHTNEW &sensor, float* dhtArr, byte retries) {
 // STORE SENSOR DATA
 void read_sensors() {
 
-  float dht1Arr[2];
-  float dht2Arr[2];
-  float dht3Arr[2];
-  float dht4Arr[2];
+  float dht_data[4][2];
 
   static byte dht_retries[4] = {0, 0, 0, 0};
 
-  bool dht1Read = readDHT(dht1, dht1Arr, dht_retries[0]);
-  bool dht2Read = readDHT(dht2, dht2Arr, dht_retries[1]);
-  bool dht3Read = readDHT(dht3, dht3Arr, dht_retries[2]);
-  bool dht4Read = readDHT(dht4, dht4Arr, dht_retries[3]);
+  bool dht1Read = readDHT(dht1, dht_data[0], dht_retries[0]);
+  bool dht2Read = readDHT(dht2, dht_data[1], dht_retries[1]);
+  bool dht3Read = readDHT(dht3, dht_data[2], dht_retries[2]);
+  bool dht4Read = readDHT(dht4, dht_data[3], dht_retries[3]);
 
   // Verify data has been received before adding to struct
   if (dht1Read) {
-    sensorData.temp1 = dht1Arr[0];
-    sensorData.rh1 = dht1Arr[1];
+    sensorData.temp1 = dht_data[0][0];
+    sensorData.rh1 = dht_data[0][1];
     dht_retries[0] = 0;
   }
   else {
@@ -106,8 +107,8 @@ void read_sensors() {
   }
   // LIVING ROOM L/H SENSOR
   if (dht2Read) {
-    sensorData.temp2 = dht2Arr[0];
-    sensorData.rh2 = dht2Arr[1];
+    sensorData.temp2 = dht_data[1][0];
+    sensorData.rh2 = dht_data[1][1];
     dht_retries[1] = 0;
   }
   else {
@@ -115,8 +116,8 @@ void read_sensors() {
   }
   // SHOWER ROOM SENSOR
   if (dht3Read) {
-    sensorData.temp3 = dht3Arr[0];
-    sensorData.rh3 = dht3Arr[1];
+    sensorData.temp3 = dht_data[2][0];
+    sensorData.rh3 = dht_data[2][1];
     dht_retries[2] = 0;
   }
   else {
@@ -124,8 +125,8 @@ void read_sensors() {
   }
   // LOFT CEILING SENSOR
   if (dht4Read) {
-    sensorData.temp4 = dht4Arr[0];
-    sensorData.rh4 = dht4Arr[1];
+    sensorData.temp4 = dht_data[3][0];
+    sensorData.rh4 = dht_data[3][1];
     dht_retries[3] = 0;
   }
   else {
@@ -134,7 +135,7 @@ void read_sensors() {
 
   // Check for valid data before calculating avg_temp
   if (dht1Read && dht2Read && dht4Read) {
-    sensorData.avg_temp = (dht1Arr[0] + dht2Arr[0] + dht4Arr[0]) / 3;
+    sensorData.avg_temp = (dht_data[0][0] + dht_data[1][0] + dht_data[3][0]) / 3;
   }
   else {
     sensorData.avg_temp = 999.9f; // Set to invalid value if any sensor data is missing
@@ -157,15 +158,15 @@ void setup() {
     // Make M4 functions available on M7
     RPC.bind("getSensorData", getSensorData);
 
-    // Set offset for all sensors
-    dht1.setHumOffset(rh_offset);
-    dht2.setHumOffset(rh_offset);
-    dht3.setHumOffset(rh_offset);
-    dht4.setHumOffset(rh_offset);
-    dht1.setTempOffset(temp_offset);
-    dht2.setTempOffset(temp_offset);
-    dht3.setTempOffset(temp_offset);
-    dht4.setTempOffset(temp_offset);
+    // Set individual offset for each sensor
+    dht1.setHumOffset(rh_offset[0]);
+    dht2.setHumOffset(rh_offset[1]);
+    dht3.setHumOffset(rh_offset[2]);
+    dht4.setHumOffset(rh_offset[3]);
+    dht1.setTempOffset(temp_offset[0]);
+    dht2.setTempOffset(temp_offset[1]);
+    dht3.setTempOffset(temp_offset[2]);
+    dht4.setTempOffset(temp_offset[3]);
 
     // initialise timer and sensors
     last_sensor_read_ms = millis();
