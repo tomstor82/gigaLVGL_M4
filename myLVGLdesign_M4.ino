@@ -151,6 +151,7 @@ void setup() {
 // LOOP FUNCTION /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void loop() {
 
+  // UNBLOCKING SENSORS CHECK ONLY AFTER READ DELAY HAS BEEN EXCEEDED
   if (millis() - read_delay_ms > last_sensor_read_ms) {
     last_sensor_read_ms = millis();
     check_sensors();
