@@ -29,8 +29,9 @@ struct SensorData {
 SensorData sensorData;
 
 // GLOBAL VARIABLES
-uint16_t read_delay_ms = 3000; // DHT22 sensor 2000ms recommended for accuracy but sensor will read around 360-370ms. 3000 set as some sensors struggle and reboot doesn't work
-uint32_t last_sensor_read_ms = 0;
+uint16_t initial_read_delay_ms = 2000; // DHT22 sensor 2000ms recommended for accuracy but sensor will read around 360-370ms. 3000 set as some sensors struggle and reboot doesn't work
+uint16_t added_read_delay_ms[4] = {0, 0, 0, 0};
+uint32_t last_sensor_read_ms[4] = {0, 0, 0, 0};
 
 // OFFSETS FOR INDIVIDUAL SENSORS
 float rh_offset[4] = {0, 0, 0, 0};
@@ -44,7 +45,7 @@ DHTNEW dht[4] = {2, 3, 4, 5}; // living space right, left, shower room and loft 
 
 
 // READ DHT SENSOR /////////////////////////////////////////////////////////////////////////////////////////////////////////////
-bool read_sensor(DHTNEW &sensor, float* dhtArr, byte retries) {  
+bool read_sensor(DHTNEW &sensor, float* dhtArr, byte retries, byte index) {
 
   // IF SENSOR READY RETURN READINGS
   if (sensor.read() == DHTLIB_OK) {
@@ -56,62 +57,59 @@ bool read_sensor(DHTNEW &sensor, float* dhtArr, byte retries) {
   else if (retries == 5) {
     dhtArr[0] = 99.9f;
     dhtArr[1] = 99.9f;
-    return 0;
+    sensor.reset();
+    added_read_delay_ms[index] = 0;
+    //RPC.print("M4 resetting sensor ");
+    //RPC.println(index+1);
   }
-  // IF SENSOR NOT READY RETURN FALSE TO INCREMENT RETRIES
+  // IF SENSOR NOT READY RETURN FALSE TO INCREMENT RETRIES AND ADD EXTRA READ DELAY
   else {
-    return 0;
+    added_read_delay_ms[index] += 500;
+    //char debug_msg[31];
+    //snprintf(debug_msg, sizeof(debug_msg), "M4 Sensor %d read delay %d ms", index+1, (initial_read_delay_ms + added_read_delay_ms[index]));
+    //RPC.println(debug_msg);
   }
+  return 0;
 }
 
 
 // CHECK AND VALIDATE SENSOR DATA ///////////////////////////////////////////////////////////////////////////////////////////////
-void check_sensors() {
-
-  // SENSOR ARRAY
-  bool dht_read[4];
-
-  // NESTED DATA ARRAY
-  float dht_data[4][2];
+void check_sensors(DHTNEW &sensor, byte index) {
 
   // SENSOR READ RETRY ARRAY
   static byte dht_retries[4] = {0, 0, 0, 0};
 
-  // ITERATE THROUGH SENSOR ARRAY AND STORE DATA TO STRUCT OR INCREMENT RETRIES
-  for (byte i = 0; i < 3; i++) {
+  float dht_data[2];
+  bool dht_read;
+  dht_read = read_sensor(sensor, dht_data, dht_retries[index], index);
 
-    // CALL READ FUNCTION
-    dht_read[i] = read_sensor(dht[i], dht_data[i], dht_retries[i]);
-
-    // CHECK RESULT
-    if (dht_read[i] || dht_retries[i] == 5) {
-      dht_retries[i] = 0;
-      switch (i) {
+  if (dht_read || dht_retries[index] == 5) {
+      dht_retries[index] = 0;
+      switch (index) {
         case 0:
-          sensorData.temp1 = dht_data[i][0];
-          sensorData.rh1 = dht_data[i][1];
+          sensorData.temp1 = dht_data[0];
+          sensorData.rh1 = dht_data[1];
           break;
         case 1:
-          sensorData.temp2 = dht_data[i][0];
-          sensorData.rh2 = dht_data[i][1];
+          sensorData.temp2 = dht_data[0];
+          sensorData.rh2 = dht_data[1];
           break;
         case 2:
-          sensorData.temp3 = dht_data[i][0];
-          sensorData.rh3 = dht_data[i][1];
+          sensorData.temp3 = dht_data[0];
+          sensorData.rh3 = dht_data[1];
           break;
         case 3:
-          sensorData.temp4 = dht_data[i][0];
-          sensorData.rh4 = dht_data[i][1];
+          sensorData.temp4 = dht_data[0];
+          sensorData.rh4 = dht_data[1];
       }
     }
     else {
-      dht_retries[i]++;
+      dht_retries[index]++;
     }
-  }
 
   // VERIFY DATA BEFORE CALCULATION AVERAGE
-  if (dht_read[0] && dht_read[1] && dht_read[3]) {
-    sensorData.avg_temp = (dht_data[0][0] + dht_data[1][0] + dht_data[3][0]) / 3;
+  if (sensorData.temp1 != 99.9f && sensorData.temp2 != 99.9f && sensorData.temp4 != 99.9f) {
+    sensorData.avg_temp = (sensorData.temp1 + sensorData.temp2 + sensorData.temp4) / 3;
   }
   else {
     sensorData.avg_temp = 99.9f; // Set to invalid value if any sensor data is missing
@@ -138,13 +136,10 @@ void setup() {
   RPC.bind("getSensorData", getSensorData);
 
   // SET SENSOR OFFSETS
-  for (byte i = 0; i < 3; i++) {
+  for (byte i = 0; i < 4; i++) {
     dht[i].setHumOffset(rh_offset[i]);
     dht[i].setTempOffset(temp_offset[i]);
   }
-
-  // INITALISE TIMER
-  last_sensor_read_ms = millis();
 }
 
 
@@ -152,9 +147,11 @@ void setup() {
 void loop() {
 
   // UNBLOCKING SENSORS CHECK ONLY AFTER READ DELAY HAS BEEN EXCEEDED
-  if (millis() - read_delay_ms > last_sensor_read_ms) {
-    last_sensor_read_ms = millis();
-    check_sensors();
+  for (byte i = 0; i < 4; i++) {
+    if (millis() - initial_read_delay_ms - added_read_delay_ms[i] > last_sensor_read_ms[i]) {
+      last_sensor_read_ms[i] = millis();
+      check_sensors(dht[i], i);
+    }
   }
 
   delay(5);
